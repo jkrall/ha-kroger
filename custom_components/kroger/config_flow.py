@@ -59,6 +59,11 @@ class OAuth2FlowHandler(
 ):
     """Handle the Kroger OAuth2 config flow."""
 
+    # AbstractOAuth2FlowHandler reads this class attribute in __init__ and
+    # refuses to instantiate without it. The domain= class keyword above only
+    # registers the handler; the two are separate requirements.
+    DOMAIN = DOMAIN
+
     VERSION = 1
 
     def __init__(self) -> None:
