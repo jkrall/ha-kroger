@@ -1,0 +1,161 @@
+{
+  "config": {
+    "step": {
+      "pick_implementation": {
+        "title": "Pick authentication method"
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate with Kroger",
+        "description": "Kroger refresh tokens expire after six months. Select **Submit** to sign in again."
+      },
+      "store": {
+        "title": "Choose your store",
+        "description": "Your ZIP code is used once, to list nearby stores. The chain filter narrows the list to one banner.",
+        "data": {
+          "zip_code": "ZIP code",
+          "chain": "Chain"
+        },
+        "data_description": {
+          "chain": "For example KINGSOOPERS, KROGER, FRED MEYER or RALPHS."
+        }
+      },
+      "pick_store": {
+        "title": "Choose your store",
+        "data": {
+          "location_id": "Store",
+          "modality": "Default modality"
+        },
+        "data_description": {
+          "modality": "Whether items are added for pickup or delivery by default."
+        }
+      },
+      "manual_store": {
+        "title": "Enter your store ID",
+        "description": "No stores came back for that ZIP code and chain. You can enter the eight-character store ID by hand instead.",
+        "data": {
+          "location_id": "Store ID",
+          "modality": "Default modality"
+        }
+      }
+    },
+    "error": {
+      "no_locations": "No stores were found for that ZIP code and chain."
+    },
+    "abort": {
+      "already_configured": "Account is already configured",
+      "reauth_successful": "Re-authentication was successful",
+      "oauth2_error": "Received invalid token data.",
+      "oauth2_missing_configuration": "The component is not configured. Please follow the documentation.",
+      "oauth2_missing_credentials": "The integration requires application credentials.",
+      "oauth2_authorize_url_timeout": "Timeout generating authorize URL.",
+      "oauth2_no_url_available": "No URL available. For information about this error, [check the help section]({docs_url})",
+      "oauth2_user_rejected_authorize": "Account linking rejected: {error}",
+      "oauth2_timeout": "Timeout resolving OAuth token."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Kroger options",
+        "data": {
+          "location_id": "Store ID",
+          "modality": "Default modality"
+        },
+        "data_description": {
+          "location_id": "The eight-character store ID used to price and stock-check searches."
+        }
+      }
+    }
+  },
+  "application_credentials": {
+    "description": "Create an application in the [Kroger developer console]({developer_console_url}) with the redirect URI `{redirect_url}` and the scopes `cart.basic:write`, `product.compact` and `profile.compact`, then paste its client ID and secret here."
+  },
+  "selector": {
+    "modality": {
+      "options": {
+        "PICKUP": "Pickup",
+        "DELIVERY": "Delivery"
+      }
+    }
+  },
+  "services": {
+    "add_to_cart": {
+      "name": "Add to cart",
+      "description": "Adds one or more items to the cart of the signed-in Kroger account. The item lands in the cart for whichever store that account currently has selected.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which Kroger account to use. Only needed when more than one is set up."
+        },
+        "upc": {
+          "name": "UPC",
+          "description": "One 13-digit product ID, or a list of them. Use the Search products action to find them."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "How many of each item to add."
+        },
+        "modality": {
+          "name": "Modality",
+          "description": "Pickup or delivery. Defaults to the value chosen during setup."
+        }
+      }
+    },
+    "search_products": {
+      "name": "Search products",
+      "description": "Searches the Kroger catalogue and returns matching products with their UPCs, prices and stock levels.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Account",
+          "description": "Which Kroger account to use. Only needed when more than one is set up."
+        },
+        "term": {
+          "name": "Search term",
+          "description": "A fuzzy search term, at least three characters and at most eight words."
+        },
+        "brand": {
+          "name": "Brand",
+          "description": "Restrict results to one brand. Case-sensitive."
+        },
+        "location_id": {
+          "name": "Store ID",
+          "description": "Overrides the configured store. Prices, stock levels and aisles are relative to this store."
+        },
+        "fulfillment": {
+          "name": "Fulfillment",
+          "description": "Restrict results to products available these ways."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many results to return."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "auth_failed": {
+      "message": "Kroger rejected the credentials. The refresh token may have expired; reauthenticate the integration."
+    },
+    "rate_limited": {
+      "message": "Kroger's daily call limit has been reached. The cart allowance is 5,000 calls per day and the product allowance is 10,000."
+    },
+    "api_error": {
+      "message": "Kroger returned an error ({status}): {message}"
+    },
+    "cannot_connect": {
+      "message": "Could not reach the Kroger API."
+    },
+    "entry_not_found": {
+      "message": "No loaded Kroger account with ID {entry_id}."
+    },
+    "no_entries": {
+      "message": "No Kroger account is set up and loaded."
+    },
+    "multiple_entries": {
+      "message": "More than one Kroger account is set up. Specify which one with the Account field."
+    },
+    "search_needs_term": {
+      "message": "A search needs either a search term or a brand."
+    }
+  }
+}

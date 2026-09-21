@@ -1,0 +1,13 @@
+{
+  "domain": "kroger",
+  "name": "Kroger",
+  "codeowners": ["@jkrall"],
+  "config_flow": true,
+  "dependencies": ["application_credentials"],
+  "documentation": "https://github.com/jkrall/ha-kroger",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jkrall/ha-kroger/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

@@ -1,0 +1,73 @@
+add_to_cart:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: kroger
+    upc:
+      required: true
+      example: "0001111060903"
+      selector:
+        object:
+    quantity:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 99
+          mode: box
+    modality:
+      required: false
+      selector:
+        select:
+          translation_key: modality
+          options:
+            - PICKUP
+            - DELIVERY
+
+search_products:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: kroger
+    term:
+      required: false
+      example: whole milk
+      selector:
+        text:
+    brand:
+      required: false
+      example: Simple Truth
+      selector:
+        text:
+    location_id:
+      required: false
+      example: "62000123"
+      selector:
+        text:
+    fulfillment:
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - label: Available in store
+              value: ais
+            - label: Curbside pickup
+              value: csp
+            - label: Delivery to home
+              value: dth
+            - label: Ship to home
+              value: sth
+    limit:
+      required: false
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 50
+          mode: box
