@@ -122,3 +122,8 @@ will not come close.
 
 Add this repository to [HACS](https://hacs.xyz) as a custom repository of type
 *Integration*, install **Kroger**, and restart Home Assistant.
+
+**Requires Home Assistant 2026.3 or newer.** The OAuth2 implementation raises
+`OAuth2TokenRequestError` and its siblings, which were added to
+`homeassistant.exceptions` in 2026.3; on an older core the integration fails at
+import.
