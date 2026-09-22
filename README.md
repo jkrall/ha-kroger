@@ -149,6 +149,11 @@ and `brand` narrow the field, and **anything still ambiguous fails and lists
 the candidates rather than adding the wrong thing**. Since the API cannot
 remove what it added, refusing is the only safe answer.
 
+Long names are handled: Kroger caps `filter.term` at **eight words** and
+rejects anything longer with a bare 400, while real product names routinely
+run past that — the creamer above is ten words. Only what is sent to Kroger is
+trimmed; the full name you gave is still what the match is made against.
+
 #### `check_availability`
 
 On by default. Looks the product up before adding and refuses if the store is

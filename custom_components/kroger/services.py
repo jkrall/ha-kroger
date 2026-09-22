@@ -36,6 +36,7 @@ from .const import (
     DEFAULT_MODALITY,
     DOMAIN,
     MODALITIES,
+    MAX_TERM_WORDS,
     MODALITY_FULFILLMENT,
     SERVICE_ADD_TO_CART,
     SERVICE_SEARCH_PRODUCTS,
@@ -155,6 +156,19 @@ def _fulfillable(product: dict[str, Any], modality: str) -> bool:
     return any(flags.get(k) for k in keys)
 
 
+def _search_term(term: str) -> str:
+    """Trim a product name to something Kroger's search will accept.
+
+    filter.term is capped at eight words and a longer one is rejected with a
+    bare 400, so a pasted product name — usually longer — has to be cut down.
+    Tokens that are purely punctuation are dropped first, since they consume a
+    word each while narrowing nothing. The untrimmed name is still what
+    _match_by_name compares against, so precision is not lost, only reach.
+    """
+    words = [w for w in term.split() if re.search(r"[a-z0-9]", w, re.I)]
+    return " ".join(words[:MAX_TERM_WORDS])
+
+
 def _normalise(text: str | None) -> str:
     """Lowercase and collapse anything that is not a letter or digit."""
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
@@ -243,7 +257,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
         if term:
             found = await api.async_search_products(
-                term=term,
+                term=_search_term(term),
                 brand=call.data.get(ATTR_BRAND),
                 location_id=location_id,
                 limit=50,
@@ -334,8 +348,9 @@ def async_setup_services(hass: HomeAssistant) -> None:
         location_id = call.data.get(ATTR_LOCATION_ID) or entry.options.get(
             CONF_LOCATION_ID
         )
+        raw_term = call.data.get(ATTR_TERM)
         products = await api.async_search_products(
-            term=call.data.get(ATTR_TERM),
+            term=_search_term(raw_term) if raw_term else None,
             brand=call.data.get(ATTR_BRAND),
             product_id=call.data.get(ATTR_PRODUCT_ID),
             location_id=location_id,

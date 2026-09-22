@@ -52,6 +52,13 @@ ATTR_CHECK_AVAILABILITY: Final = "check_availability"
 # signal. Only this value positively means "do not order".
 STOCK_OUT: Final = "TEMPORARILY_OUT_OF_STOCK"
 
+# Kroger rejects a filter.term of more than eight words with a bare 400, and
+# counts every space as a word break. Real product names routinely exceed it:
+# "Coffee mate French Vanilla Flavored Coffee Creamer Non-Dairy Gluten-Free"
+# is ten. The full name is still used to match locally; only what is sent to
+# Kroger is trimmed.
+MAX_TERM_WORDS: Final = 8
+
 # Which fulfillment flags can be trusted to veto an add, per modality. Kroger
 # returns these keys in camelCase (inStore, shipToHome), unlike the lowercase
 # spelling in the prose docs, so they are matched case-insensitively.
