@@ -5,11 +5,26 @@ add_to_cart:
       selector:
         config_entry:
           integration: kroger
+    term:
+      required: false
+      example: Coffee Mate French Vanilla Flavored Coffee Creamer Non-Dairy
+      selector:
+        text:
     upc:
-      required: true
-      example: "0001111060903"
+      required: false
+      example: "0005000032275"
       selector:
         object:
+    brand:
+      required: false
+      example: Coffee mate
+      selector:
+        text:
+    size:
+      required: false
+      example: 32 fl oz
+      selector:
+        text:
     quantity:
       required: false
       default: 1
@@ -26,6 +41,11 @@ add_to_cart:
           options:
             - PICKUP
             - DELIVERY
+    check_availability:
+      required: false
+      default: true
+      selector:
+        boolean:
 
 search_products:
   fields:
@@ -44,9 +64,14 @@ search_products:
       example: Simple Truth
       selector:
         text:
+    product_id:
+      required: false
+      example: "0005000032275"
+      selector:
+        text:
     location_id:
       required: false
-      example: "62000123"
+      example: "62000084"
       selector:
         text:
     fulfillment:

@@ -44,6 +44,29 @@ ATTR_BRAND: Final = "brand"
 ATTR_LIMIT: Final = "limit"
 ATTR_LOCATION_ID: Final = "location_id"
 ATTR_FULFILLMENT: Final = "fulfillment"
+ATTR_PRODUCT_ID: Final = "product_id"
+ATTR_SIZE: Final = "size"
+ATTR_CHECK_AVAILABILITY: Final = "check_availability"
+
+# Kroger omits stockLevel entirely when it has no data, so absence is not a
+# signal. Only this value positively means "do not order".
+STOCK_OUT: Final = "TEMPORARILY_OUT_OF_STOCK"
+
+# Which fulfillment flags can be trusted to veto an add, per modality. Kroger
+# returns these keys in camelCase (inStore, shipToHome), unlike the lowercase
+# spelling in the prose docs, so they are matched case-insensitively.
+#
+# DELIVERY is deliberately absent, and that is not an oversight. Checked against
+# the King Soopers site on 2026-09-21 for UPC 0079849310367 at store 62000084:
+# the API reported curbside, inStore AND delivery all false, while the site
+# offered "Kroger Delivery: Available" and only "Pickup: Unavailable". The
+# pickup flags matched the site exactly; the delivery flag did not. Delivery is
+# sourced against the customer's address rather than their selected store, so a
+# store's delivery flag under-reports and must not veto an add — it would refuse
+# orders that succeed.
+MODALITY_FULFILLMENT: Final = {
+    MODALITY_PICKUP: ("curbside", "instore"),
+}
 
 # Kroger's public rate limits, for the README and for context in log messages.
 CART_CALLS_PER_DAY: Final = 5000

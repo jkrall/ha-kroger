@@ -82,7 +82,7 @@
   "services": {
     "add_to_cart": {
       "name": "Add to cart",
-      "description": "Adds one or more items to the cart of the signed-in Kroger account. The item lands in the cart for whichever store that account currently has selected.",
+      "description": "Adds an item to the cart of the signed-in Kroger account, identified either by name or by UPC. The item lands in the cart for whichever store that account currently has selected.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
@@ -90,7 +90,7 @@
         },
         "upc": {
           "name": "UPC",
-          "description": "One 13-digit product ID, or a list of them. Use the Search products action to find them."
+          "description": "One 13-digit product ID, or a list of them, instead of a name. Use the Search products action to find them. Give either this or a name."
         },
         "quantity": {
           "name": "Quantity",
@@ -99,12 +99,28 @@
         "modality": {
           "name": "Modality",
           "description": "Pickup or delivery. Defaults to the value chosen during setup."
+        },
+        "term": {
+          "name": "Product name",
+          "description": "The product's name, as shown on the store's website. An exact name always wins; if the name matches several products the action fails and lists them rather than guessing, because Kroger's search is fuzzy and its result order is not stable."
+        },
+        "brand": {
+          "name": "Brand",
+          "description": "Narrows a name search to one brand. Case-sensitive."
+        },
+        "check_availability": {
+          "name": "Check availability",
+          "description": "Look the product up before adding and refuse if the store cannot supply it for the chosen modality. Leave this on: the cart endpoint answers 204 for an unorderable item just as it does for a real one, and the API cannot remove what it added."
+        },
+        "size": {
+          "name": "Size",
+          "description": "Narrows a name search by package size, for example '32 fl oz'. Often required: Kroger sells different products under descriptions that differ only in capitalisation, and size is what tells them apart."
         }
       }
     },
     "search_products": {
       "name": "Search products",
-      "description": "Searches the Kroger catalogue and returns matching products with their UPCs, prices and stock levels.",
+      "description": "Searches the Kroger catalogue and returns matching products with their UPCs, prices, stock levels and whether your store can supply them.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
@@ -129,19 +145,20 @@
         "limit": {
           "name": "Limit",
           "description": "How many results to return."
+        },
+        "product_id": {
+          "name": "UPC",
+          "description": "Look up one exact 13-digit product ID instead of searching."
         }
       }
     }
   },
   "exceptions": {
-    "auth_failed": {
-      "message": "Kroger rejected the credentials. The refresh token may have expired; reauthenticate the integration."
-    },
-    "rate_limited": {
-      "message": "Kroger's daily call limit has been reached. The cart allowance is 5,000 calls per day and the product allowance is 10,000."
-    },
     "api_error": {
       "message": "Kroger returned an error ({status}): {message}"
+    },
+    "auth_failed": {
+      "message": "Kroger rejected the credentials. The refresh token may have expired; reauthenticate the integration."
     },
     "cannot_connect": {
       "message": "Could not reach the Kroger API."
@@ -149,14 +166,35 @@
     "entry_not_found": {
       "message": "No loaded Kroger account with ID {entry_id}."
     },
-    "no_entries": {
-      "message": "No Kroger account is set up and loaded."
-    },
     "multiple_entries": {
       "message": "More than one Kroger account is set up. Specify which one with the Account field."
     },
+    "name_ambiguous": {
+      "message": "'{term}' matches {count} available products, so nothing was added. Use a more specific name or a UPC. Candidates: {candidates}"
+    },
+    "name_no_results": {
+      "message": "Kroger returned no products matching '{term}'."
+    },
+    "name_none_available": {
+      "message": "Nothing matching '{term}' can be supplied for {modality} by your store right now. Closest matches: {candidates}"
+    },
+    "need_upc_or_term": {
+      "message": "Give either a product name or a UPC, not both and not neither."
+    },
+    "no_entries": {
+      "message": "No Kroger account is set up and loaded."
+    },
+    "not_available": {
+      "message": "{description} (UPC {upc}) cannot be supplied for {modality} by your store right now, so it was not added."
+    },
+    "rate_limited": {
+      "message": "Kroger's daily call limit has been reached. The cart allowance is 5,000 calls per day and the product allowance is 10,000."
+    },
     "search_needs_term": {
       "message": "A search needs either a search term or a brand."
+    },
+    "upc_not_found": {
+      "message": "Kroger has no product with UPC {upc} at your store."
     }
   }
 }

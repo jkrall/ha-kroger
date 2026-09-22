@@ -108,6 +108,19 @@ Each result carries `upc`, `description`, `brand`, `size`, `price`,
 
 ### `kroger.add_to_cart`
 
+Identify the item by name, which is usually what you want in a button or
+automation:
+
+```yaml
+action: kroger.add_to_cart
+data:
+  term: Coffee mate French Vanilla Flavored Coffee Creamer Non-Dairy Gluten-Free
+  size: 32 fl oz
+  quantity: 1
+```
+
+or by UPC, which is exact:
+
 ```yaml
 action: kroger.add_to_cart
 data:
@@ -116,7 +129,46 @@ data:
   modality: PICKUP
 ```
 
-`upc` also accepts a list, in which case `quantity` applies to each.
+Give one or the other, not both. `upc` also accepts a list, in which case
+`quantity` applies to each.
+
+**A product name often does not identify a product, so `size` matters.**
+Kroger ships genuinely different items under descriptions that differ only in
+capitalisation. These two are both "Coffee Mate French Vanilla Flavored Coffee
+Creamer Non-Dairy Gluten-Free":
+
+| UPC | size | price |
+|---|---|---|
+| 0005000032275 | 32 fl oz | $4.49 |
+| 0005000035022 | 64 fl oz | $7.79 |
+
+Because Kroger's search is fuzzy *and* its result order is documented as
+unstable between identical requests, taking the top hit would pick between
+those at random. This integration does not: an exact name wins outright, `size`
+and `brand` narrow the field, and **anything still ambiguous fails and lists
+the candidates rather than adding the wrong thing**. Since the API cannot
+remove what it added, refusing is the only safe answer.
+
+#### `check_availability`
+
+On by default. Looks the product up before adding and refuses if the store is
+known to be unable to supply it. It deliberately asserts only what the API is
+reliable about:
+
+- **An explicit `TEMPORARILY_OUT_OF_STOCK` blocks the add.** A *missing* stock
+  level does not — Kroger omits the field entirely when it has no data, even
+  for products it will happily deliver.
+- **For pickup, the `curbside` and `inStore` flags block the add.** These were
+  checked against the storefront and agreed with it.
+- **For delivery, nothing beyond stock is checked.** The per-store `delivery`
+  flag is not trustworthy: for UPC 0079849310367 at store 62000084 the API
+  reported `curbside`, `inStore` and `delivery` all false, while the site
+  offered "Kroger Delivery: Available" and only "Pickup: Unavailable". Delivery
+  is sourced against the customer's address rather than their selected store,
+  so that flag under-reports and would refuse orders that succeed.
+
+Set it to `false` to skip the lookup entirely, which saves one Products call
+per add.
 
 ## Example: reorder milk every Tuesday
 
@@ -153,7 +205,17 @@ time. Search once, note the UPC, then hard-code it.
 
 Kroger's public allowances are 5,000 cart calls and 10,000 product calls per
 day, counted per endpoint rather than per operation. A household automation
-will not come close.
+will not come close. Note that `check_availability` and name resolution each
+spend a Products call per add.
+
+## There is no order history
+
+Kroger's developer catalogue is 13 API products — five public (Authorization,
+Cart, Identity, Location, Product) and eight partner. **None of them expose
+orders.** Order numbers cannot be looked up, past orders cannot be listed, and
+"reorder what I bought last time" cannot be built on this API at any tier. The
+nearest partner APIs, Seamless Delivery and Unattended Locker Pickup, are for
+delivery and locker vendors rather than customer order history.
 
 ## Installation
 
