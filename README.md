@@ -44,6 +44,38 @@ removed `my`, Home Assistant instead sends
 `<your external URL>/auth/external/callback`, and that is what you must
 register.
 
+### `Invalid client_id` on the Kroger sign-in page
+
+Kroger runs two environments with **separate, non-transferable credentials**:
+production (`api.kroger.com`) and certification (`api-ce.kroger.com`). An
+application is locked to whichever one it was registered in, and this
+integration only ever talks to production. A certification client_id therefore
+fails at the authorize step with a Kroger-branded *invalid request / Invalid
+client_id* page, before Home Assistant is involved at all.
+
+There is no way to move an application between environments — register a new
+one in production and replace the credentials.
+
+To tell which one you have, request the authorize endpoint on both hosts with
+your client_id (no secret needed, nothing is logged in):
+
+```bash
+for h in api.kroger.com api-ce.kroger.com; do
+  echo -n "$h -> "
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    "https://$h/v1/connect/oauth2/authorize?response_type=code&client_id=YOUR_CLIENT_ID&redirect_uri=https://my.home-assistant.io/redirect/oauth&scope=product.compact"
+done
+```
+
+`400` from production and `200` from certification means the application is in
+the wrong environment. You want the reverse.
+
+Certification is not a usable fallback: it authenticates against
+`login-stage.kroger.com`, which your real Kroger account does not exist in, and
+Kroger's own documentation states the certification environment is not
+accessible outside their network and third-party clients are not permitted
+access. Authorization Code integrations have to be tested in production.
+
 ### Reauthenticating
 
 Kroger refresh tokens are single-use and expire after six months. Home
