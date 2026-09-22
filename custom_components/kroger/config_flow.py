@@ -111,8 +111,20 @@ class OAuth2FlowHandler(
         access_token = data["token"]["access_token"]
         profile = await _async_api_get(self.hass, access_token, "/identity/profile")
         if profile and (profile_id := profile.get("data", {}).get("id")):
-            await self.async_set_unique_id(profile_id)
+            # raise_on_progress must be False here. Core OAuth flows create the
+            # entry immediately after claiming the unique id, so they never hold
+            # one for long. This flow goes on to ask which store to shop, and
+            # sits on the form holding the id — which would make every retry
+            # abort with already_in_progress against the user's own abandoned
+            # attempt. Superseding that attempt is the useful behaviour.
+            await self.async_set_unique_id(profile_id, raise_on_progress=False)
             self._abort_if_unique_id_configured()
+
+            for other in self._async_in_progress(
+                include_uninitialized=True,
+                match_context={"unique_id": profile_id},
+            ):
+                self.hass.config_entries.flow.async_abort(other["flow_id"])
 
         return await self.async_step_store()
 
