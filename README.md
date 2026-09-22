@@ -29,6 +29,11 @@ Two consequences worth designing your automations around:
   Soopers app. The store configured here is used only to price and stock-check
   *searches*.
 
+Confirmed working end to end against a King Soopers account on 2026-09-21: a
+`204` from `cart/add` really did put the item in the banner's delivery cart. The
+account-wide API does reach a banner cart — but only the one the account is
+currently pointed at.
+
 ## Setup
 
 1. Register an application at the
