@@ -46,6 +46,11 @@ add_to_cart:
       default: true
       selector:
         boolean:
+    alternatives:
+      required: false
+      example: '["0079849310367", {"term": "Caribou Daybreak Light Roast Ground Coffee", "size": "12 oz"}]'
+      selector:
+        object:
 
 search_products:
   fields:

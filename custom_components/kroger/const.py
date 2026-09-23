@@ -47,6 +47,7 @@ ATTR_FULFILLMENT: Final = "fulfillment"
 ATTR_PRODUCT_ID: Final = "product_id"
 ATTR_SIZE: Final = "size"
 ATTR_CHECK_AVAILABILITY: Final = "check_availability"
+ATTR_ALTERNATIVES: Final = "alternatives"
 
 # Kroger omits stockLevel entirely when it has no data, so absence is not a
 # signal. Only this value positively means "do not order".

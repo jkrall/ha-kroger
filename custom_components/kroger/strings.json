@@ -82,7 +82,7 @@
   "services": {
     "add_to_cart": {
       "name": "Add to cart",
-      "description": "Adds an item to the cart of the signed-in Kroger account, identified either by name or by UPC. The item lands in the cart for whichever store that account currently has selected.",
+      "description": "Adds an item to the cart of the signed-in Kroger account, identified either by name or by UPC, or the first of its alternatives that can be had. The item lands in the cart for whichever store that account currently has selected. Returns what was added and whether it was a substitute.",
       "fields": {
         "config_entry_id": {
           "name": "Account",
@@ -115,6 +115,10 @@
         "size": {
           "name": "Size",
           "description": "Narrows a name search by package size, for example '32 fl oz'. Often required: Kroger sells different products under descriptions that differ only in capitalisation, and size is what tells them apart."
+        },
+        "alternatives": {
+          "name": "Alternatives",
+          "description": "Fallback items, in order of preference, for when the item cannot be had. Each is a UPC, a product name, or a mapping with 'term' or 'upc' plus optional 'size' and 'brand'. An item is passed over only when Kroger reports it unavailable or cannot find it; an ambiguous name still fails. Needs Check availability, and a single item rather than a list of UPCs."
         }
       }
     },
@@ -154,6 +158,12 @@
     }
   },
   "exceptions": {
+    "alternatives_need_check": {
+      "message": "Alternatives need Check availability turned on; without the lookup nothing is ever found unavailable, so no alternative could be reached."
+    },
+    "alternatives_need_one_item": {
+      "message": "Alternatives can back up a single item only, not a list of UPCs."
+    },
     "api_error": {
       "message": "Kroger returned an error ({status}): {message}"
     },
@@ -180,6 +190,9 @@
     },
     "need_upc_or_term": {
       "message": "Give either a product name or a UPC, not both and not neither."
+    },
+    "no_alternative_available": {
+      "message": "Neither the item nor any of its alternatives can be had right now, so nothing was added. Tried: {tried}"
     },
     "no_entries": {
       "message": "No Kroger account is set up and loaded."

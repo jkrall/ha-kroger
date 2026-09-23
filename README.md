@@ -175,6 +175,67 @@ reliable about:
 Set it to `false` to skip the lookup entirely, which saves one Products call
 per add.
 
+**The API cannot see delivery stock at all.** On 2026-09-22 the storefront
+showed Caribou Blend (0079849310365) as "Kroger Delivery: Unavailable" and
+Caribou Daybreak (0079849310367) as available, while the API gave the two an
+identical answer: no `stockLevel`, and the same fulfillment flags — all false
+at store 62000084, all *true* at store 62000065, where the site also said
+delivery was unavailable. The API describes a store's shelf; Kroger Delivery
+is fulfilled from somewhere it does not expose. Other products do carry a real
+`stockLevel` (roughly one search result in six reads
+`TEMPORARILY_OUT_OF_STOCK`), so the check is worth keeping. It just cannot
+catch a delivery-only shortage. The storefront gets its answer from an internal
+endpoint behind bot protection, which this integration does not use.
+
+#### `alternatives`
+
+Fallback items, tried in order when the item cannot be had:
+
+```yaml
+action: kroger.add_to_cart
+data:
+  term: Caribou Blend Medium Roast Ground Coffee - 12oz Bag
+  size: 12 oz
+  alternatives:
+    - term: Caribou Coffee, Daybreak Light Roast Ground Coffee - 12oz Bag
+      size: 12 oz
+response_variable: added
+```
+
+Each alternative is a UPC (a bare string of digits), a product name (any other
+bare string), or a mapping with `term` or `upc` plus optional `size` and
+`brand` — the mapping is only needed to give a name its size. The alternative
+above could equally be written `- "0079849310367"`.
+
+An item is passed over **only** when it is unavailable by the rules above or
+Kroger cannot find it at all, which is what a discontinued product looks like.
+An ambiguous name still fails immediately rather than falling through, because
+that is a mistake in the call, and silently ordering the backup would hide it.
+If nothing on the list can be had, nothing is added and the error lists what
+was tried and why each was skipped.
+
+Alternatives need `check_availability` on, since without the lookup nothing is
+ever found unavailable, and a single primary item rather than a list of UPCs.
+Given the delivery blind spot above, expect them to fire for pickup orders and
+explicit out-of-stocks, not for a delivery-only shortage.
+
+#### Response
+
+`add_to_cart` optionally returns what it actually added, which is the only
+confirmation available — the cart cannot be read back:
+
+```yaml
+added:
+  - upc: "0079849310367"
+    description: Caribou Coffee, Daybreak Light Roast Ground Coffee - 12oz Bag
+    size: 12 oz
+    price: 13.99
+substituted: true
+skipped:
+  - item: Caribou Blend Medium Roast Ground Coffee - 12oz Bag
+    reason: unavailable
+```
+
 ## Example: reorder milk every Tuesday
 
 ```yaml

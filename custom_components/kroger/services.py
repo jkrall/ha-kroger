@@ -19,6 +19,7 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    ATTR_ALTERNATIVES,
     ATTR_BRAND,
     ATTR_CHECK_AVAILABILITY,
     ATTR_CONFIG_ENTRY_ID,
@@ -43,6 +44,40 @@ from .const import (
     STOCK_OUT,
 )
 
+
+def _alternative(value: Any) -> dict[str, Any]:
+    """Normalise one fallback item to the shape of a primary item.
+
+    A bare string of digits is a UPC and any other bare string is a product
+    name; no real product name is all digits, so the shorthand is unambiguous.
+    A mapping is needed only to give a name its size or brand.
+    """
+    if isinstance(value, str):
+        value = value.strip()
+        return {ATTR_UPC: [value]} if value.isdigit() else {ATTR_TERM: value}
+    if ATTR_UPC in value:
+        return {**value, ATTR_UPC: [value[ATTR_UPC]]}
+    return value
+
+
+ALTERNATIVE_SCHEMA = vol.All(
+    vol.Any(
+        cv.string,
+        vol.All(
+            vol.Schema(
+                {
+                    vol.Exclusive(ATTR_TERM, "item"): cv.string,
+                    vol.Exclusive(ATTR_UPC, "item"): cv.string,
+                    vol.Optional(ATTR_BRAND): cv.string,
+                    vol.Optional(ATTR_SIZE): cv.string,
+                }
+            ),
+            cv.has_at_least_one_key(ATTR_TERM, ATTR_UPC),
+        ),
+    ),
+    _alternative,
+)
+
 ADD_TO_CART_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
@@ -53,8 +88,22 @@ ADD_TO_CART_SCHEMA = vol.Schema(
         vol.Optional(ATTR_QUANTITY, default=1): vol.All(int, vol.Range(min=1, max=99)),
         vol.Optional(ATTR_MODALITY): vol.In(MODALITIES),
         vol.Optional(ATTR_CHECK_AVAILABILITY, default=True): cv.boolean,
+        vol.Optional(ATTR_ALTERNATIVES, default=list): vol.All(
+            cv.ensure_list, [ALTERNATIVE_SCHEMA]
+        ),
     }
 )
+
+# The failures that mean "this item cannot be had right now", which is what an
+# alternative is for, mapped to how the skip is reported. Anything else —
+# notably an ambiguous name — is a mistake in the call, and trying the next
+# item would paper over it, so it fails outright.
+FALL_THROUGH: dict[str, str] = {
+    "name_no_results": "not found",
+    "upc_not_found": "not found",
+    "name_none_available": "unavailable",
+    "not_available": "unavailable",
+}
 
 SEARCH_PRODUCTS_SCHEMA = vol.Schema(
     {
@@ -232,12 +281,137 @@ def _match_by_name(
     return None, products
 
 
+async def _async_resolve(
+    api: Any,
+    item: dict[str, Any],
+    modality: str,
+    check: bool,
+    location_id: str | None,
+) -> list[dict[str, Any]]:
+    """Turn one item — a name, or a list of UPCs — into products to add.
+
+    Raises ServiceValidationError when the item cannot be added; its
+    translation_key says why, which is what decides whether an alternative
+    gets a turn.
+    """
+    term = item.get(ATTR_TERM)
+    if term:
+        found = await api.async_search_products(
+            term=_search_term(term),
+            brand=item.get(ATTR_BRAND),
+            location_id=location_id,
+            limit=50,
+        )
+        products = [_compact_product(p) for p in found]
+        if not products:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="name_no_results",
+                translation_placeholders={"term": term},
+            )
+
+        # Availability filters before disambiguation, so an unorderable
+        # near-duplicate cannot make a real match look ambiguous.
+        pool = [p for p in products if _fulfillable(p, modality)] if check else products
+        if not pool:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="name_none_available",
+                translation_placeholders={
+                    "term": term,
+                    "modality": modality.lower(),
+                    "candidates": "; ".join(_describe(p) for p in products[:5]),
+                },
+            )
+
+        match, candidates = _match_by_name(pool, term, item.get(ATTR_SIZE))
+        if match is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="name_ambiguous",
+                translation_placeholders={
+                    "term": term,
+                    "count": str(len(candidates)),
+                    "candidates": "; ".join(_describe(p) for p in candidates[:5]),
+                },
+            )
+        return [match]
+
+    resolved = []
+    for upc in item[ATTR_UPC]:
+        if not check:
+            resolved.append({"upc": upc, "description": upc})
+            continue
+        found = await api.async_search_products(
+            product_id=upc, location_id=location_id, limit=1
+        )
+        if not found:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="upc_not_found",
+                translation_placeholders={"upc": upc},
+            )
+        product = _compact_product(found[0])
+        if not _fulfillable(product, modality):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="not_available",
+                translation_placeholders={
+                    "description": product.get("description") or upc,
+                    "upc": upc,
+                    "modality": modality.lower(),
+                },
+            )
+        resolved.append(product)
+    return resolved
+
+
+def _label(item: dict[str, Any]) -> str:
+    """How an item is named when reporting that it was skipped."""
+    return item.get(ATTR_TERM) or ", ".join(item[ATTR_UPC])
+
+
+async def _async_pick(
+    api: Any,
+    items: list[dict[str, Any]],
+    modality: str,
+    check: bool,
+    location_id: str | None,
+) -> tuple[int, list[dict[str, Any]], list[dict[str, str]]]:
+    """Resolve the first item, in preference order, that can be had.
+
+    Returns its index, the products to add, and what was passed over and why.
+    With a single item this is exactly _async_resolve: its error surfaces
+    unchanged.
+    """
+    skipped: list[dict[str, str]] = []
+    for index, item in enumerate(items):
+        try:
+            resolved = await _async_resolve(api, item, modality, check, location_id)
+        except ServiceValidationError as err:
+            if len(items) == 1 or err.translation_key not in FALL_THROUGH:
+                raise
+            skipped.append(
+                {"item": _label(item), "reason": FALL_THROUGH[err.translation_key]}
+            )
+            continue
+        return index, resolved, skipped
+
+    raise ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="no_alternative_available",
+        translation_placeholders={
+            "tried": "; ".join(f"{s['item']} ({s['reason']})" for s in skipped),
+        },
+    )
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the Kroger services."""
 
-    async def async_add_to_cart(call: ServiceCall) -> None:
-        """Add one or more items to the cart."""
+    async def async_add_to_cart(call: ServiceCall) -> ServiceResponse:
+        """Add an item, or the first of its alternatives that can be had."""
         entry = _resolve_entry(hass, call)
         api = entry.runtime_data
 
@@ -254,77 +428,35 @@ def async_setup_services(hass: HomeAssistant) -> None:
         quantity = call.data[ATTR_QUANTITY]
         check = call.data[ATTR_CHECK_AVAILABILITY]
         location_id = entry.options.get(CONF_LOCATION_ID)
+        alternatives = call.data[ATTR_ALTERNATIVES]
+
+        if alternatives:
+            # Without the lookup nothing is ever found unavailable, so the
+            # alternatives could never be reached.
+            if not check:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="alternatives_need_check",
+                )
+            # A list of UPCs is several items; there is no saying which of
+            # them a single alternative would stand in for.
+            if upcs and len(upcs) > 1:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="alternatives_need_one_item",
+                )
 
         if term:
-            found = await api.async_search_products(
-                term=_search_term(term),
-                brand=call.data.get(ATTR_BRAND),
-                location_id=location_id,
-                limit=50,
-            )
-            products = [_compact_product(p) for p in found]
-            if not products:
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="name_no_results",
-                    translation_placeholders={"term": term},
-                )
-
-            # Availability filters before disambiguation, so an unorderable
-            # near-duplicate cannot make a real match look ambiguous.
-            pool = [p for p in products if _fulfillable(p, modality)] if check else products
-            if not pool:
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="name_none_available",
-                    translation_placeholders={
-                        "term": term,
-                        "modality": modality.lower(),
-                        "candidates": "; ".join(_describe(p) for p in products[:5]),
-                    },
-                )
-
-            match, candidates = _match_by_name(
-                pool, term, call.data.get(ATTR_SIZE)
-            )
-            if match is None:
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN,
-                    translation_key="name_ambiguous",
-                    translation_placeholders={
-                        "term": term,
-                        "count": str(len(candidates)),
-                        "candidates": "; ".join(_describe(p) for p in candidates[:5]),
-                    },
-                )
-            resolved = [match]
+            primary = {
+                ATTR_TERM: term,
+                ATTR_BRAND: call.data.get(ATTR_BRAND),
+                ATTR_SIZE: call.data.get(ATTR_SIZE),
+            }
         else:
-            resolved = []
-            for upc in upcs:
-                if not check:
-                    resolved.append({"upc": upc, "description": upc})
-                    continue
-                found = await api.async_search_products(
-                    product_id=upc, location_id=location_id, limit=1
-                )
-                if not found:
-                    raise ServiceValidationError(
-                        translation_domain=DOMAIN,
-                        translation_key="upc_not_found",
-                        translation_placeholders={"upc": upc},
-                    )
-                product = _compact_product(found[0])
-                if not _fulfillable(product, modality):
-                    raise ServiceValidationError(
-                        translation_domain=DOMAIN,
-                        translation_key="not_available",
-                        translation_placeholders={
-                            "description": product.get("description") or upc,
-                            "upc": upc,
-                            "modality": modality.lower(),
-                        },
-                    )
-                resolved.append(product)
+            primary = {ATTR_UPC: upcs}
+        index, resolved, skipped = await _async_pick(
+            api, [primary, *alternatives], modality, check, location_id
+        )
 
         await api.async_add_to_cart(
             [
@@ -332,6 +464,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
                 for p in resolved
             ]
         )
+        return {
+            "added": [
+                {k: p.get(k) for k in ("upc", "description", "size", "price")}
+                for p in resolved
+            ],
+            "substituted": index > 0,
+            "skipped": skipped,
+        }
 
     async def async_search_products(call: ServiceCall) -> ServiceResponse:
         """Search the catalogue and return compact results."""
@@ -364,7 +504,11 @@ def async_setup_services(hass: HomeAssistant) -> None:
         return {"products": compact}
 
     hass.services.async_register(
-        DOMAIN, SERVICE_ADD_TO_CART, async_add_to_cart, schema=ADD_TO_CART_SCHEMA
+        DOMAIN,
+        SERVICE_ADD_TO_CART,
+        async_add_to_cart,
+        schema=ADD_TO_CART_SCHEMA,
+        supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
