@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -13,6 +14,17 @@ from homeassistant.helpers import config_entry_oauth2_flow
 from .const import API_BASE
 
 _LOGGER = logging.getLogger(__name__)
+
+# Kroger's product search intermittently answers 404 for a query that succeeds
+# moments later — the button that motivated this failed once and then passed
+# five times running, unchanged. A genuinely empty search is a 200 with no
+# data, never a 404, so on a GET a 404 is always spurious and worth another go.
+GET_ATTEMPTS = 3
+
+
+def _is_transient(status: int) -> bool:
+    """Whether a GET that got this status is worth repeating."""
+    return status == 404 or status >= 500
 
 
 class KrogerApiError(HomeAssistantError):
@@ -56,14 +68,28 @@ class KrogerApi:
             "Accept": "application/json",
         }
 
+        # Only reads are retried. A cart add whose response was lost may well
+        # have landed, and the API cannot remove an item, so a retry there
+        # risks a silent double add.
+        attempts = GET_ATTEMPTS if method == "GET" else 1
         try:
-            resp = await self._session.request(
-                method,
-                f"{API_BASE}{path}",
-                params=params,
-                json=json_body,
-                headers=headers,
-            )
+            for attempt in range(1, attempts + 1):
+                resp = await self._session.request(
+                    method,
+                    f"{API_BASE}{path}",
+                    params=params,
+                    json=json_body,
+                    headers=headers,
+                )
+                if attempt < attempts and _is_transient(resp.status):
+                    _LOGGER.warning(
+                        "Kroger answered %s %s with %s; retrying (%s of %s)",
+                        method, path, resp.status, attempt, attempts - 1,
+                    )
+                    resp.release()
+                    await asyncio.sleep(attempt)
+                    continue
+                break
             resp.raise_for_status()
         except ClientResponseError as err:
             if err.status in (401, 403):
