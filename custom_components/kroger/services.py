@@ -32,12 +32,14 @@ from .const import (
     ATTR_SIZE,
     ATTR_TERM,
     ATTR_UPC,
+    CONF_DELIVERY_LOCATION_ID,
     CONF_LOCATION_ID,
     CONF_MODALITY,
     DEFAULT_MODALITY,
     DOMAIN,
     MODALITIES,
     MAX_TERM_WORDS,
+    MODALITY_DELIVERY,
     MODALITY_FULFILLMENT,
     SERVICE_ADD_TO_CART,
     SERVICE_SEARCH_PRODUCTS,
@@ -287,6 +289,7 @@ async def _async_resolve(
     modality: str,
     check: bool,
     location_id: str | None,
+    delivery_location_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Turn one item — a name, or a list of UPCs — into products to add.
 
@@ -294,6 +297,47 @@ async def _async_resolve(
     translation_key says why, which is what decides whether an alternative
     gets a turn.
     """
+    resolved = await _async_resolve_at_store(api, item, modality, check, location_id)
+    if check and modality == MODALITY_DELIVERY and delivery_location_id:
+        for product in resolved:
+            await _async_check_delivery(api, product, delivery_location_id)
+    return resolved
+
+
+async def _async_check_delivery(
+    api: Any, product: dict[str, Any], delivery_location_id: str
+) -> None:
+    """Refuse a product the delivery fulfilment centre reports out of stock.
+
+    A store knows nothing about Kroger Delivery stock — see
+    CONF_DELIVERY_LOCATION_ID in const.py — so this asks the fulfilment centre.
+    As everywhere else, only an explicit TEMPORARILY_OUT_OF_STOCK is a no. A
+    product the centre does not list at all is let through: it may still be
+    delivered some other way, and absence has never been treated as a refusal.
+    """
+    found = await api.async_search_products(
+        product_id=product["upc"], location_id=delivery_location_id, limit=1
+    )
+    if found and _compact_product(found[0]).get("stock_level") == STOCK_OUT:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="not_available",
+            translation_placeholders={
+                "description": product.get("description") or product["upc"],
+                "upc": product["upc"],
+                "modality": "delivery",
+            },
+        )
+
+
+async def _async_resolve_at_store(
+    api: Any,
+    item: dict[str, Any],
+    modality: str,
+    check: bool,
+    location_id: str | None,
+) -> list[dict[str, Any]]:
+    """Resolve an item against the store: its catalogue, stock and flags."""
     term = item.get(ATTR_TERM)
     if term:
         found = await api.async_search_products(
@@ -377,6 +421,7 @@ async def _async_pick(
     modality: str,
     check: bool,
     location_id: str | None,
+    delivery_location_id: str | None = None,
 ) -> tuple[int, list[dict[str, Any]], list[dict[str, str]]]:
     """Resolve the first item, in preference order, that can be had.
 
@@ -387,7 +432,9 @@ async def _async_pick(
     skipped: list[dict[str, str]] = []
     for index, item in enumerate(items):
         try:
-            resolved = await _async_resolve(api, item, modality, check, location_id)
+            resolved = await _async_resolve(
+                api, item, modality, check, location_id, delivery_location_id
+            )
         except ServiceValidationError as err:
             if len(items) == 1 or err.translation_key not in FALL_THROUGH:
                 raise
@@ -428,6 +475,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         quantity = call.data[ATTR_QUANTITY]
         check = call.data[ATTR_CHECK_AVAILABILITY]
         location_id = entry.options.get(CONF_LOCATION_ID)
+        delivery_location_id = entry.options.get(CONF_DELIVERY_LOCATION_ID)
         alternatives = call.data[ATTR_ALTERNATIVES]
 
         if alternatives:
@@ -455,7 +503,12 @@ def async_setup_services(hass: HomeAssistant) -> None:
         else:
             primary = {ATTR_UPC: upcs}
         index, resolved, skipped = await _async_pick(
-            api, [primary, *alternatives], modality, check, location_id
+            api,
+            [primary, *alternatives],
+            modality,
+            check,
+            location_id,
+            delivery_location_id,
         )
 
         await api.async_add_to_cart(

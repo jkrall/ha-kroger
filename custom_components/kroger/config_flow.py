@@ -17,6 +17,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     API_BASE,
     CONF_CHAIN,
+    CONF_DELIVERY_LOCATION_ID,
     CONF_LOCATION_ID,
     CONF_MODALITY,
     CONF_ZIP_CODE,
@@ -251,7 +252,7 @@ class OAuth2FlowHandler(
 
 
 class KrogerOptionsFlow(OptionsFlowWithReload):
-    """Change the default store and modality after setup."""
+    """Change the store, modality and delivery location after setup."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -278,6 +279,14 @@ class KrogerOptionsFlow(OptionsFlowWithReload):
                             translation_key="modality",
                         )
                     ),
+                    # Optional and suggested rather than defaulted, so clearing the
+                    # field really removes it.
+                    vol.Optional(
+                        CONF_DELIVERY_LOCATION_ID,
+                        description={
+                            "suggested_value": options.get(CONF_DELIVERY_LOCATION_ID)
+                        },
+                    ): str,
                 }
             ),
         )

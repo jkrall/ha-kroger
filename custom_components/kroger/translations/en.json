@@ -60,10 +60,12 @@
         "title": "Kroger options",
         "data": {
           "location_id": "Store ID",
-          "modality": "Default modality"
+          "modality": "Default modality",
+          "delivery_location_id": "Delivery stock location"
         },
         "data_description": {
-          "location_id": "The eight-character store ID used to price and stock-check searches."
+          "location_id": "The eight-character store ID used to price and stock-check searches.",
+          "delivery_location_id": "Where Kroger Delivery is fulfilled from, for stock checks on delivery orders. Stores know nothing about delivery stock; a Kroger fulfillment centre does. It is a location with store number FCnnn, e.g. 540FC007 (Denver Shed). Leave empty to check the store only."
         }
       }
     }

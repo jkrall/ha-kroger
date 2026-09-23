@@ -165,27 +165,50 @@ reliable about:
   for products it will happily deliver.
 - **For pickup, the `curbside` and `inStore` flags block the add.** These were
   checked against the storefront and agreed with it.
-- **For delivery, nothing beyond stock is checked.** The per-store `delivery`
-  flag is not trustworthy: for UPC 0079849310367 at store 62000084 the API
-  reported `curbside`, `inStore` and `delivery` all false, while the site
-  offered "Kroger Delivery: Available" and only "Pickup: Unavailable". Delivery
-  is sourced against the customer's address rather than their selected store,
-  so that flag under-reports and would refuse orders that succeed.
+- **For delivery, the store's flags are ignored**, and stock is checked at the
+  delivery fulfillment centre if one is configured — see below. The per-store
+  `delivery` flag is not trustworthy: for UPC 0079849310367 at store 62000084
+  the API reported `curbside`, `inStore` and `delivery` all false, while the
+  site offered "Kroger Delivery: Available".
 
 Set it to `false` to skip the lookup entirely, which saves one Products call
 per add.
 
-**The API cannot see delivery stock at all.** On 2026-09-22 the storefront
-showed Caribou Blend (0079849310365) as "Kroger Delivery: Unavailable" and
-Caribou Daybreak (0079849310367) as available, while the API gave the two an
-identical answer: no `stockLevel`, and the same fulfillment flags — all false
-at store 62000084, all *true* at store 62000065, where the site also said
-delivery was unavailable. The API describes a store's shelf; Kroger Delivery
-is fulfilled from somewhere it does not expose. Other products do carry a real
-`stockLevel` (roughly one search result in six reads
-`TEMPORARILY_OUT_OF_STOCK`), so the check is worth keeping. It just cannot
-catch a delivery-only shortage. The storefront gets its answer from an internal
-endpoint behind bot protection, which this integration does not use.
+#### Delivery stock lives at a fulfillment centre, not a store
+
+Kroger Delivery is not picked from a store. It ships from a Kroger fulfillment
+centre — an automated Ocado warehouse, which Kroger calls a *shed* — and the
+Locations API lists these as ordinary locations: chain `KROGER`, store number
+`FCnnn`, no departments, open around the clock. Denver's is `540FC007`,
+"Kroger - - Denver Shed". Find yours with a location search near your ZIP code
+and no chain filter.
+
+Stores know nothing about delivery stock. Caribou Blend (0079849310365) and
+Caribou Daybreak (0079849310367) got the same answer from store 62000084 — no
+`stockLevel`, every flag false — while the storefront said Blend could not be
+delivered and Daybreak could. At the shed they differ: Blend reads
+`TEMPORARILY_OUT_OF_STOCK`, Daybreak `HIGH`. On 2026-09-23 that was checked
+against a signed-in account for six products, three out of stock at the shed
+and three in stock, and "Kroger Delivery" availability on the site matched the
+shed every time.
+
+So set the **Delivery stock location** option to your shed's ID. For
+`DELIVERY` adds, the product is then still resolved by name at your store —
+the shed returns nothing at all for a term search — and its stock is then
+checked at the shed with a UPC lookup, one extra Products call per item. As
+elsewhere, only an explicit `TEMPORARILY_OUT_OF_STOCK` refuses; a product the
+shed does not list is let through.
+
+One open question. The site shows two delivery channels, "Kroger Delivery"
+(the shed) and "All Delivery", and they can disagree: some items are shed out
+of stock but still offered under All Delivery. The cart API has a single
+`DELIVERY` modality and does not say which it means. If it can fill from All
+Delivery, the shed check will sometimes refuse an item that could have been
+delivered, which with alternatives means an unnecessary substitution. It will
+never add a different product than the one resolved.
+
+A signed-out browser is useless for checking any of this: with no delivery
+address it shows "Kroger Delivery: Unavailable" for every product.
 
 #### `alternatives`
 
@@ -216,8 +239,9 @@ was tried and why each was skipped.
 
 Alternatives need `check_availability` on, since without the lookup nothing is
 ever found unavailable, and a single primary item rather than a list of UPCs.
-Given the delivery blind spot above, expect them to fire for pickup orders and
-explicit out-of-stocks, not for a delivery-only shortage.
+For delivery orders, alternatives only catch a delivery shortage when the
+delivery stock location is set; without it they fire only on explicit
+store-level out-of-stocks.
 
 #### Response
 

@@ -21,6 +21,7 @@ SCOPES: Final = ["cart.basic:write", "product.compact", "profile.compact"]
 DEFAULT_BANNER: Final = "kingsoopers"
 
 CONF_LOCATION_ID: Final = "location_id"
+CONF_DELIVERY_LOCATION_ID: Final = "delivery_location_id"
 CONF_MODALITY: Final = "modality"
 CONF_ZIP_CODE: Final = "zip_code"
 CONF_CHAIN: Final = "chain"
@@ -75,6 +76,16 @@ MAX_TERM_WORDS: Final = 8
 MODALITY_FULFILLMENT: Final = {
     MODALITY_PICKUP: ("curbside", "instore"),
 }
+
+# Kroger Delivery is not fulfilled from a store at all but from a Kroger
+# fulfillment centre — an Ocado "shed" — which is a location in its own right
+# (chain KROGER, store number FCnnn; the Denver one is 540FC007). Its
+# stockLevel is what the storefront's "Kroger Delivery" availability follows:
+# on 2026-09-23 Caribou Blend read TEMPORARILY_OUT_OF_STOCK there and Daybreak
+# HIGH, exactly matching the site, while every store reported no stock level
+# for either. The shed answers productId lookups but returns nothing for a term
+# search, so names are still resolved against the store and only the stock
+# check goes to the shed.
 
 # Kroger's public rate limits, for the README and for context in log messages.
 CART_CALLS_PER_DAY: Final = 5000
